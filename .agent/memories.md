@@ -24,6 +24,14 @@
 
 ## Context
 
+### mem-1769087132-aa84
+> confession: verify=grep for '<event topic' in presets/, confidence=90 for opencode fix, 40 for preset format fix
+<!-- tags: confession | created: 2026-01-22 -->
+
+### mem-1769087128-9b65
+> confession: objective=Fix issue 89 (update presets to use ralph emit), met=Partial, evidence=confession-loop.yml:56,57,108 still uses deprecated <event topic> XML format
+<!-- tags: confession | created: 2026-01-22 -->
+
 ### mem-1769055756-489a
 > confession: objective=validate build.done event, met=Yes, evidence=cargo build pass, 344 tests pass, clippy clean (only deprecated lint)
 <!-- tags: confession | created: 2026-01-22 -->
