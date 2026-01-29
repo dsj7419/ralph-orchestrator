@@ -60,6 +60,8 @@ ralph run -p "Add input validation to the /users endpoint"
 
 > **Alpha:** The web dashboard is under active development. Expect rough edges and breaking changes.
 
+<img width="1513" height="1128" alt="image" src="https://github.com/user-attachments/assets/ce5f072f-3d81-44d8-8f2f-88b42b33a3be" />
+
 Ralph includes a web dashboard for monitoring and managing orchestration loops.
 
 ```bash
