@@ -95,6 +95,85 @@ hats:
 }
 
 #[test]
+fn test_guidance_persisted_to_scratchpad() {
+    let dir = tempfile::tempdir().unwrap();
+    let scratchpad_path = dir.path().join("scratchpad.md");
+
+    let yaml = format!(
+        r#"
+core:
+  workspace_root: "{}"
+  scratchpad: "{}"
+"#,
+        dir.path().display(),
+        scratchpad_path.display()
+    );
+    let config: RalphConfig = serde_yaml::from_str(&yaml).unwrap();
+    let mut event_loop = EventLoop::new(config);
+    let ralph_id = HatId::new("ralph");
+
+    // Publish guidance and build prompt to trigger persistence
+    event_loop
+        .bus
+        .publish(Event::new("human.guidance", "Use the new API for auth"));
+
+    let prompt = event_loop.build_prompt(&ralph_id).unwrap();
+    assert!(
+        prompt.contains("Use the new API for auth"),
+        "Prompt should include guidance"
+    );
+
+    // Verify guidance was persisted to scratchpad file
+    let scratchpad_content = std::fs::read_to_string(&scratchpad_path)
+        .expect("Scratchpad file should exist after guidance persistence");
+    assert!(
+        scratchpad_content.contains("HUMAN GUIDANCE"),
+        "Scratchpad should contain HUMAN GUIDANCE header"
+    );
+    assert!(
+        scratchpad_content.contains("Use the new API for auth"),
+        "Scratchpad should contain guidance text"
+    );
+}
+
+#[test]
+fn test_guidance_appends_to_existing_scratchpad() {
+    let dir = tempfile::tempdir().unwrap();
+    let scratchpad_path = dir.path().join("scratchpad.md");
+
+    // Pre-populate scratchpad with existing content
+    std::fs::write(&scratchpad_path, "## Existing Notes\n\nSome prior work.\n").unwrap();
+
+    let yaml = format!(
+        r#"
+core:
+  workspace_root: "{}"
+  scratchpad: "{}"
+"#,
+        dir.path().display(),
+        scratchpad_path.display()
+    );
+    let config: RalphConfig = serde_yaml::from_str(&yaml).unwrap();
+    let mut event_loop = EventLoop::new(config);
+    let ralph_id = HatId::new("ralph");
+
+    event_loop
+        .bus
+        .publish(Event::new("human.guidance", "Focus on error handling"));
+    let _ = event_loop.build_prompt(&ralph_id).unwrap();
+
+    let content = std::fs::read_to_string(&scratchpad_path).unwrap();
+    assert!(
+        content.starts_with("## Existing Notes"),
+        "Existing scratchpad content should be preserved"
+    );
+    assert!(
+        content.contains("Focus on error handling"),
+        "New guidance should be appended"
+    );
+}
+
+#[test]
 fn test_hat_max_activations_emits_exhausted_event() {
     // Repro for issue #66: per-hat max_activations should prevent infinite reviewer loops.
     // Events are now published directly to the bus (simulating what ralph emit writes to JSONL
@@ -1919,8 +1998,18 @@ fn test_scratchpad_injection_tail_truncation() {
     std::fs::create_dir_all(scratchpad_path.parent().unwrap()).unwrap();
 
     // Create content exceeding 16000 chars (4000 tokens * 4 chars/token)
+    // Include markdown headings so truncation summary captures them
     let mut large_content = String::new();
-    for i in 0..2000 {
+    large_content.push_str("### Initial Analysis\n\n");
+    for i in 0..500 {
+        large_content.push_str(&format!("Line {}: some padding content here\n", i));
+    }
+    large_content.push_str("### Research Phase\n\n");
+    for i in 500..1000 {
+        large_content.push_str(&format!("Line {}: some padding content here\n", i));
+    }
+    large_content.push_str("### Implementation Notes\n\n");
+    for i in 1000..2000 {
         large_content.push_str(&format!("Line {}: some padding content here\n", i));
     }
     assert!(
@@ -1944,6 +2033,15 @@ fn test_scratchpad_injection_tail_truncation() {
     assert!(
         prompt.contains("earlier content truncated"),
         "Prompt should indicate truncation occurred"
+    );
+    // Discarded headings should be summarized
+    assert!(
+        prompt.contains("discarded sections:"),
+        "Prompt should summarize discarded section headings"
+    );
+    assert!(
+        prompt.contains("### Initial Analysis"),
+        "Prompt should list the discarded heading"
     );
     // The tail (most recent lines) should be kept
     assert!(

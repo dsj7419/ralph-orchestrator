@@ -29,7 +29,7 @@ pub enum BotCommands {
     /// Send a test message to verify the bot works
     Test(TestArgs),
     /// Run as a persistent daemon, listening on Telegram and starting loops on demand
-    Daemon,
+    Daemon(DaemonArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -58,6 +58,13 @@ pub struct TestArgs {
     pub message: String,
 }
 
+#[derive(Parser, Debug)]
+pub struct DaemonArgs {
+    /// Config file to use for loops started by the daemon (default: ralph.yml)
+    #[arg(short = 'c', long = "config")]
+    pub config: Option<std::path::PathBuf>,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DISPATCHER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,7 +74,7 @@ pub async fn execute(args: BotArgs, use_colors: bool) -> Result<()> {
         BotCommands::Onboard(onboard_args) => onboard_telegram(onboard_args, use_colors).await,
         BotCommands::Status => bot_status(use_colors).await,
         BotCommands::Test(test_args) => bot_test(test_args, use_colors).await,
-        BotCommands::Daemon => run_daemon(use_colors).await,
+        BotCommands::Daemon(daemon_args) => run_daemon(daemon_args, use_colors).await,
     }
 }
 
@@ -387,10 +394,22 @@ async fn bot_test(args: TestArgs, use_colors: bool) -> Result<()> {
 ///
 /// Currently only Telegram is supported. The adapter implements
 /// [`DaemonAdapter`] and handles all platform-specific concerns.
-async fn run_daemon(use_colors: bool) -> Result<()> {
+async fn run_daemon(args: DaemonArgs, use_colors: bool) -> Result<()> {
     use ralph_proto::DaemonAdapter;
 
     let workspace_root = std::env::current_dir().context("Failed to get current directory")?;
+    let config_path = args.config.map(|path| {
+        if path.is_absolute() {
+            path
+        } else {
+            workspace_root.join(path)
+        }
+    });
+    if let Some(ref path) = config_path
+        && !path.exists()
+    {
+        anyhow::bail!("Config file not found: {}", path.display());
+    }
 
     // Resolve bot token and chat_id for Telegram adapter
     let token = resolve_token().context(
@@ -410,9 +429,10 @@ async fn run_daemon(use_colors: bool) -> Result<()> {
 
     // Build the start_loop callback — wraps our CLI loop runner
     let start_loop: ralph_proto::StartLoopFn = Box::new(move |prompt: String| {
+        let config_path = config_path.clone();
         Box::pin(async move {
             let ws = std::env::current_dir()?;
-            let reason = crate::loop_runner::start_loop(prompt, ws, None).await?;
+            let reason = crate::loop_runner::start_loop(prompt, ws, config_path).await?;
             Ok(format!("{:?}", reason))
         })
     });

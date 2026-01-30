@@ -822,14 +822,73 @@ impl EventLoop {
         )
     }
 
-    /// Stores guidance payloads and prepares them for prompt injection.
+    /// Stores guidance payloads, persists them to scratchpad, and prepares them for prompt injection.
+    ///
+    /// Guidance events are ephemeral in the event bus (consumed by `take_pending`).
+    /// This method both caches them in memory for prompt injection and appends
+    /// them to the scratchpad file so they survive across process restarts.
     fn update_robot_guidance(&mut self, guidance_events: Vec<Event>) {
         if guidance_events.is_empty() {
             return;
         }
 
+        // Persist new guidance to scratchpad before caching
+        self.persist_guidance_to_scratchpad(&guidance_events);
+
         self.robot_guidance
             .extend(guidance_events.into_iter().map(|e| e.payload));
+    }
+
+    /// Appends human guidance entries to the scratchpad file for durability.
+    ///
+    /// Each guidance message is written as a timestamped markdown entry so it
+    /// appears alongside the agent's own thinking and survives process restarts.
+    fn persist_guidance_to_scratchpad(&self, guidance_events: &[Event]) {
+        use std::io::Write;
+
+        let scratchpad_path = self.scratchpad_path();
+        let resolved_path = if scratchpad_path.is_relative() {
+            self.config.core.workspace_root.join(&scratchpad_path)
+        } else {
+            scratchpad_path
+        };
+
+        // Create parent directories if needed
+        if let Some(parent) = resolved_path.parent()
+            && !parent.exists()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            warn!("Failed to create scratchpad directory: {}", e);
+            return;
+        }
+
+        let mut file = match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&resolved_path)
+        {
+            Ok(f) => f,
+            Err(e) => {
+                warn!("Failed to open scratchpad for guidance persistence: {}", e);
+                return;
+            }
+        };
+
+        let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        for event in guidance_events {
+            let entry = format!(
+                "\n### HUMAN GUIDANCE ({})\n\n{}\n",
+                timestamp, event.payload
+            );
+            if let Err(e) = file.write_all(entry.as_bytes()) {
+                warn!("Failed to write guidance to scratchpad: {}", e);
+            }
+        }
+
+        info!(
+            count = guidance_events.len(),
+            "Persisted human guidance to scratchpad"
+        );
     }
 
     /// Injects cached guidance into the next prompt build.
@@ -1038,11 +1097,28 @@ impl EventLoop {
             // Find a line boundary near the start of the tail
             let start = content.len() - char_budget;
             let line_start = content[start..].find('\n').map_or(start, |n| start + n + 1);
-            format!(
-                "<!-- earlier content truncated ({} chars omitted) -->\n\n{}",
-                line_start,
-                &content[line_start..]
-            )
+            let discarded = &content[..line_start];
+
+            // Summarize discarded content by extracting markdown headings
+            let headings: Vec<&str> = discarded
+                .lines()
+                .filter(|line| line.starts_with('#'))
+                .collect();
+            let summary = if headings.is_empty() {
+                format!(
+                    "<!-- earlier content truncated ({} chars omitted) -->",
+                    line_start
+                )
+            } else {
+                format!(
+                    "<!-- earlier content truncated ({} chars omitted) -->\n\
+                     <!-- discarded sections: {} -->",
+                    line_start,
+                    headings.join(" | ")
+                )
+            };
+
+            format!("{}\n\n{}", summary, &content[line_start..])
         } else {
             content
         };
