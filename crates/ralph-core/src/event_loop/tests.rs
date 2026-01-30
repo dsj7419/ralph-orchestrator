@@ -34,6 +34,67 @@ hats:
 }
 
 #[test]
+fn test_guidance_persists_across_iterations_solo_mode() {
+    let config = RalphConfig::default();
+    let mut event_loop = EventLoop::new(config);
+    let ralph_id = HatId::new("ralph");
+
+    event_loop
+        .bus
+        .publish(Event::new("human.guidance", "Keep this in mind"));
+
+    let prompt = event_loop.build_prompt(&ralph_id).unwrap();
+    assert!(
+        prompt.contains("## ROBOT GUIDANCE"),
+        "Prompt should include guidance section"
+    );
+    assert!(
+        prompt.contains("Keep this in mind"),
+        "Prompt should include guidance payload"
+    );
+    assert!(
+        !event_loop.has_pending_events(),
+        "Guidance should not remain pending after prompt build"
+    );
+
+    let prompt_again = event_loop.build_prompt(&ralph_id).unwrap();
+    assert!(
+        prompt_again.contains("Keep this in mind"),
+        "Guidance should persist across iterations"
+    );
+}
+
+#[test]
+fn test_guidance_persists_across_iterations_multi_hat_mode() {
+    let yaml = r#"
+hats:
+  planner:
+    name: "Planner"
+    triggers: ["task.start"]
+    publishes: ["task.plan"]
+"#;
+    let config: RalphConfig = serde_yaml::from_str(yaml).unwrap();
+    let mut event_loop = EventLoop::new(config);
+    let ralph_id = HatId::new("ralph");
+
+    event_loop
+        .bus
+        .publish(Event::new("human.guidance", "Focus on error handling"));
+
+    let prompt = event_loop.build_prompt(&ralph_id).unwrap();
+    assert!(
+        prompt.contains("Focus on error handling"),
+        "Prompt should include guidance payload"
+    );
+
+    let prompt_again = event_loop.build_prompt(&ralph_id).unwrap();
+    assert!(
+        prompt_again.contains("Focus on error handling"),
+        "Guidance should persist across iterations in multi-hat mode"
+    );
+}
+
+#[test]
 fn test_hat_max_activations_emits_exhausted_event() {
     // Repro for issue #66: per-hat max_activations should prevent infinite reviewer loops.
     // Events are now published directly to the bus (simulating what ralph emit writes to JSONL

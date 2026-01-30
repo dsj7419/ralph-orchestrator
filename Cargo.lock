@@ -2268,6 +2268,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "nix 0.29.0",
  "ralph-proto",
  "serde",
  "serde_json",

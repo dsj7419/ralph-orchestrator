@@ -124,6 +124,8 @@ pub struct EventLoop {
     state: LoopState,
     instruction_builder: InstructionBuilder,
     ralph: HatlessRalph,
+    /// Cached human guidance messages that should persist across iterations.
+    robot_guidance: Vec<String>,
     /// Event reader for consuming events from JSONL file.
     /// Made pub(crate) to allow tests to override the path.
     pub(crate) event_reader: EventReader,
@@ -264,6 +266,7 @@ impl EventLoop {
             state: LoopState::new(),
             instruction_builder,
             ralph,
+            robot_guidance: Vec::new(),
             event_reader,
             diagnostics,
             loop_context: Some(context),
@@ -360,6 +363,7 @@ impl EventLoop {
             state: LoopState::new(),
             instruction_builder,
             ralph,
+            robot_guidance: Vec::new(),
             event_reader,
             diagnostics,
             loop_context: None,
@@ -697,12 +701,9 @@ impl EventLoop {
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                // Inject human guidance into prompt if present
-                if !guidance_events.is_empty() {
-                    let guidance: Vec<String> =
-                        guidance_events.into_iter().map(|e| e.payload).collect();
-                    self.ralph.set_robot_guidance(guidance);
-                }
+                // Persist and inject human guidance into prompt if present
+                self.update_robot_guidance(guidance_events);
+                self.apply_robot_guidance();
 
                 // Build base prompt and prepend memories + scratchpad + ready tasks
                 let base_prompt = self.ralph.build_prompt(&events_context, &[]);
@@ -752,13 +753,10 @@ impl EventLoop {
                     .into_iter()
                     .partition(|e| e.topic.as_str() == "human.guidance");
 
-                // Inject human guidance before building prompt (must happen before
+                // Persist and inject human guidance before building prompt (must happen before
                 // immutable borrows from determine_active_hats)
-                if !guidance_events.is_empty() {
-                    let guidance: Vec<String> =
-                        guidance_events.into_iter().map(|e| e.payload).collect();
-                    self.ralph.set_robot_guidance(guidance);
-                }
+                self.update_robot_guidance(guidance_events);
+                self.apply_robot_guidance();
 
                 // Determine which hats are active based on regular events
                 let active_hat_ids = self.determine_active_hat_ids(&regular_events);
@@ -822,6 +820,25 @@ impl EventLoop {
             self.instruction_builder
                 .build_custom_hat(hat, &events_context),
         )
+    }
+
+    /// Stores guidance payloads and prepares them for prompt injection.
+    fn update_robot_guidance(&mut self, guidance_events: Vec<Event>) {
+        if guidance_events.is_empty() {
+            return;
+        }
+
+        self.robot_guidance
+            .extend(guidance_events.into_iter().map(|e| e.payload));
+    }
+
+    /// Injects cached guidance into the next prompt build.
+    fn apply_robot_guidance(&mut self) {
+        if self.robot_guidance.is_empty() {
+            return;
+        }
+
+        self.ralph.set_robot_guidance(self.robot_guidance.clone());
     }
 
     /// Prepends auto-injected skill content to the prompt.

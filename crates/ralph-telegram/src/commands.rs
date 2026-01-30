@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::bot::escape_html;
+use crate::loop_lock::{LockState, lock_path, lock_state};
 
 /// Check if a message is a bot command (starts with `/`).
 pub fn is_command(text: &str) -> bool {
@@ -64,12 +65,25 @@ fn cmd_help() -> String {
 
 /// `/status` — Current iteration, hat, elapsed time, loop ID.
 fn cmd_status(workspace_root: &Path) -> String {
-    let lock_path = workspace_root.join(".ralph/loop.lock");
+    let state = match lock_state(workspace_root) {
+        Ok(state) => state,
+        Err(e) => {
+            return format!(
+                "Failed to check lock state: {}",
+                escape_html(&e.to_string())
+            );
+        }
+    };
 
-    if !lock_path.exists() {
+    if state == LockState::Inactive {
         return "No active loop (no lock file found).".to_string();
     }
 
+    if state == LockState::Stale {
+        return "No active loop (stale lock file found).".to_string();
+    }
+
+    let lock_path = lock_path(workspace_root);
     let lock_content = match std::fs::read_to_string(&lock_path) {
         Ok(c) => c,
         Err(e) => return format!("Failed to read lock file: {}", escape_html(&e.to_string())),
@@ -328,8 +342,16 @@ fn cmd_restart(workspace_root: &Path) -> String {
     let restart_path = workspace_root.join(".ralph/restart-requested");
 
     // Check if a loop is actually running
-    let lock_path = workspace_root.join(".ralph/loop.lock");
-    if !lock_path.exists() {
+    let state = match lock_state(workspace_root) {
+        Ok(state) => state,
+        Err(e) => {
+            return format!(
+                "Failed to check lock state: {}",
+                escape_html(&e.to_string())
+            );
+        }
+    };
+    if state != LockState::Active {
         return "No active loop to restart.".to_string();
     }
 
@@ -494,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn cmd_status_with_lock_file() {
+    fn cmd_status_with_stale_lock_file() {
         let dir = TempDir::new().unwrap();
         setup_workspace(&dir);
 
@@ -505,6 +527,34 @@ mod tests {
         });
         let lock_path = dir.path().join(".ralph/loop.lock");
         std::fs::write(&lock_path, serde_json::to_string(&lock).unwrap()).unwrap();
+
+        let result = cmd_status(dir.path());
+        assert!(result.contains("No active loop"));
+        assert!(result.contains("stale lock"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cmd_status_with_active_lock_file() {
+        use nix::fcntl::{Flock, FlockArg};
+
+        let dir = TempDir::new().unwrap();
+        setup_workspace(&dir);
+
+        let lock = serde_json::json!({
+            "pid": 12345,
+            "started": "2026-01-30T10:00:00Z",
+            "prompt": "Build a feature"
+        });
+        let lock_path = dir.path().join(".ralph/loop.lock");
+        std::fs::write(&lock_path, serde_json::to_string(&lock).unwrap()).unwrap();
+
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .unwrap();
+        let _flock = Flock::lock(file, FlockArg::LockExclusiveNonblock).unwrap();
 
         let result = cmd_status(dir.path());
         assert!(result.contains("12345"));
@@ -676,8 +726,11 @@ mod tests {
         assert!(result.contains("No active loop"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn cmd_restart_writes_signal_file() {
+        use nix::fcntl::{Flock, FlockArg};
+
         let dir = TempDir::new().unwrap();
         setup_workspace(&dir);
 
@@ -689,6 +742,13 @@ mod tests {
         });
         let lock_path = dir.path().join(".ralph/loop.lock");
         std::fs::write(&lock_path, serde_json::to_string(&lock).unwrap()).unwrap();
+
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lock_path)
+            .unwrap();
+        let _flock = Flock::lock(file, FlockArg::LockExclusiveNonblock).unwrap();
 
         let result = cmd_restart(dir.path());
         assert!(result.contains("Restart requested"));

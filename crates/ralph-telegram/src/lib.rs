@@ -20,6 +20,7 @@ pub mod commands;
 pub mod daemon;
 mod error;
 mod handler;
+mod loop_lock;
 mod service;
 mod state;
 
