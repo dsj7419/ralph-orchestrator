@@ -583,8 +583,9 @@ impl PtyExecutor {
         let is_real_pi_backend = self.backend.command == "pi";
 
         if is_pi_stream && is_real_pi_backend {
-            let configured_provider = extract_cli_flag_value(&self.backend.args, "--provider", "-p")
-                .unwrap_or_else(|| "auto".to_string());
+            let configured_provider =
+                extract_cli_flag_value(&self.backend.args, "--provider", "-p")
+                    .unwrap_or_else(|| "auto".to_string());
             let configured_model = extract_cli_flag_value(&self.backend.args, "--model", "-m")
                 .unwrap_or_else(|| "default".to_string());
             handler.on_text(&format!(
@@ -867,7 +868,8 @@ impl PtyExecutor {
                 // Synthesize on_complete for Pi sessions (pi has no dedicated result event)
                 if is_pi_stream {
                     if is_real_pi_backend {
-                        let stream_provider = pi_state.stream_provider.as_deref().unwrap_or("unknown");
+                        let stream_provider =
+                            pi_state.stream_provider.as_deref().unwrap_or("unknown");
                         let stream_model = pi_state.stream_model.as_deref().unwrap_or("unknown");
                         handler.on_text(&format!(
                             "Pi stream: provider={stream_provider}, model={stream_model}\n"

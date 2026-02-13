@@ -508,7 +508,11 @@ fn truncate(s: &str, max: usize) -> String {
         if max < 3 {
             return "...".to_string();
         }
-        let byte_idx = s.char_indices().nth(max - 3).map(|(idx, _)| idx).unwrap_or(s.len());
+        let byte_idx = s
+            .char_indices()
+            .nth(max - 3)
+            .map(|(idx, _)| idx)
+            .unwrap_or(s.len());
         format!("{}...", &s[..byte_idx])
     }
 }
@@ -1035,35 +1039,35 @@ mod tests {
     fn test_truncate_utf8() {
         // Test Chinese characters (3 bytes each in UTF-8)
         assert_eq!(truncate("hello", 10), "hello");
-        
+
         // Chinese: "回" is bytes 0-2, "归" is bytes 3-5, "是" is bytes 6-8
         // "回归是一个中文词语" has 9 chars
         // With max=6, we should get 3 chars + "..."
         let long_chinese = "回归是一个中文词语";
         assert_eq!(truncate(long_chinese, 6), "回归是...");
-        
+
         // With max=9, char count is equal so unchanged
         assert_eq!(truncate(long_chinese, 9), long_chinese);
-        
+
         // Emojis (4 bytes each) - "🎉🎊🎁🎄" has 4 chars, 16 bytes
         // With max=3, we want 0 chars + "..." (3-3=0 chars before ellipsis)
         let emoji = "🎉🎊🎁🎄";
         assert_eq!(truncate(emoji, 3), "...");
-        
+
         // With max=5 (more than 4 chars), should return unchanged
         assert_eq!(truncate(emoji, 5), emoji);
-        
+
         // With max=4, exactly 4 chars, unchanged
         assert_eq!(truncate(emoji, 4), emoji);
-        
+
         // Mixed ASCII and non-ASCII - "hi回hi🎉" = 6 chars
         // With max=5, we should get 2 chars + "..."
         let mixed = "hi回hi🎉";
         assert_eq!(truncate(mixed, 5), "hi...");
-        
+
         // With max=6, exactly 6 chars, unchanged
         assert_eq!(truncate(mixed, 6), mixed);
-        
+
         // Test with max < 3 (edge case)
         assert_eq!(truncate("hello", 2), "...");
     }

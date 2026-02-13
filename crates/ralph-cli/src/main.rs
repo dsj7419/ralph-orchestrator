@@ -724,7 +724,7 @@ struct CompletionsArgs {
 
 fn completions_command(args: CompletionsArgs) -> Result<()> {
     use clap_complete::generate;
-    
+
     let mut cli = Cli::command();
     generate(args.shell, &mut cli, "ralph", &mut std::io::stdout());
     Ok(())
