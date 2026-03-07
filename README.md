@@ -72,6 +72,24 @@ ralph web --frontend-port 8080         # custom frontend port
 ralph web --legacy-node-api            # opt into deprecated Node tRPC backend
 ```
 
+### MCP Server Workspace Scope
+
+`ralph mcp serve` is scoped to a single workspace root per server instance.
+
+```bash
+ralph mcp serve --workspace-root /path/to/repo
+```
+
+Precedence is:
+
+1. `--workspace-root`
+2. `RALPH_API_WORKSPACE_ROOT`
+3. current working directory
+
+For multi-repo use, run one MCP server instance per repo/workspace. Ralph's current
+control-plane APIs persist config, tasks, loops, planning sessions, and collections
+under a single workspace root, so server-per-workspace is the deterministic model.
+
 **Requirements:**
 - Rust toolchain (for `ralph-api`)
 - Node.js >= 18 + npm (for the frontend)

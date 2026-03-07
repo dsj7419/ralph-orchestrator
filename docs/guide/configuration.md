@@ -11,6 +11,18 @@ RALPH_CONFIG=/path/to/config.yml ralph run ...
 ralph run -c custom-config.yml
 ```
 
+## MCP Workspace Resolution
+
+`ralph mcp serve` resolves its workspace root in this order:
+
+1. `--workspace-root <path>`
+2. `RALPH_API_WORKSPACE_ROOT`
+3. current working directory
+
+Use one MCP server instance per workspace/repo. Ralph's current control-plane APIs are
+workspace-scoped: `config.*`, `task.*`, `loop.*`, `planning.*`, and `collection.*` all
+read or persist state under a single root.
+
 ## CLI Config Overrides
 
 You can override specific core fields from the command line without creating a separate config file. This is useful for:

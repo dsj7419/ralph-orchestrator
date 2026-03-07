@@ -2854,6 +2854,32 @@ mod tests {
     }
 
     #[test]
+    fn test_mcp_serve_parses_workspace_root_flag() {
+        let cli = Cli::try_parse_from([
+            "ralph",
+            "mcp",
+            "serve",
+            "--workspace-root",
+            "/tmp/ralph-workspace",
+        ])
+        .expect("CLI parse failed");
+
+        match cli.command {
+            Some(Commands::Mcp(crate::mcp::McpArgs {
+                command: crate::mcp::McpCommands::Serve(crate::mcp::ServeArgs {
+                    workspace_root,
+                }),
+            })) => {
+                assert_eq!(
+                    workspace_root,
+                    Some(std::path::PathBuf::from("/tmp/ralph-workspace"))
+                );
+            }
+            other => panic!("unexpected CLI parse result: {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_tutorial_steps_cover_core_topics() {
         let steps = tutorial_steps();
         assert_eq!(steps.len(), 3);
