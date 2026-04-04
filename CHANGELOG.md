@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-04-04
+
+### Fixed
+
+- `cargo install ralph-cli` fails due to cross-crate `#[path]` include of `tool_preview.rs` from `ralph-adapters` into `ralph-tui`. Moved `tool_preview` to a public module in `ralph-adapters` and added it as a proper dependency.
+
 ## [2.9.0] - 2026-04-03
 
 ### Added

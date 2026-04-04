@@ -36,6 +36,7 @@ mod pi_stream;
 mod pty_executor;
 pub mod pty_handle;
 mod stream_handler;
+pub mod tool_preview;
 
 pub use acp_executor::AcpExecutor;
 pub use auto_detect::{
