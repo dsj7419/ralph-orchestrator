@@ -173,7 +173,7 @@ All persistent state lives in `.agent/`:
 ├── memories.md         # Persistent learning
 ├── tasks.jsonl         # Runtime work tracking
 ├── event_history.jsonl # Event audit log
-└── scratchpad.md       # Legacy state (deprecated)
+└── scratchpad.md       # Iteration state (per-hat scratchpads may also exist)
 ```
 
 ### Event Bus
